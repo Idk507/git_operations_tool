@@ -1,6 +1,6 @@
 # Git Operations Tool
 
-[![PyPI version](https://badge.fury.io/py/git-operations-tool.svg)]([https://test.pypi.org/project/git-operations-tool/])
+[![PyPI version](https://test.pypi.org/project/git-operations-tool/)(https://badge.fury.io/py/git-operations-tool.svg)]([https://test.pypi.org/project/git-operations-tool/])
 [![Python versions](https://img.shields.io/pypi/pyversions/git-operations-tool.svg)](https://pypi.org/project/git-operations-tool/)
 [![License](https://img.shields.io/pypi/l/git-operations-tool.svg)](https://opensource.org/licenses/MIT)
 [![CI/CD](https://github.com/Idk507/git-operations-tool/actions/workflows/test.yml/badge.svg)](https://github.com/Idk507/git-operations-tool/actions) 
