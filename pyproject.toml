@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "git-operations-tool"
-version = "0.1.2"
+version = "0.3.0"
 authors = [
     {name = "Dhanushkumar R", email = "danushidk507@gmail.com"},
 ]

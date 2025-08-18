@@ -17,44 +17,86 @@ class GitOperationsTool:
         self.menu = None
         
     def auto_commit_and_push(self):
-        """Auto commit and push all files individually"""
-        print("\nDiscovering files and folders...")
-        items = self.repo_manager.get_all_files_and_folders()
+        """Auto commit and push with options for bulk or individual commits"""
+        print("\nAnalyzing repository status...")
         
+        try:
+            if not self.repo_manager.repo.is_dirty() and not self.repo_manager.repo.untracked_files:
+                print("✓ Repository is already clean - no changes to commit.")
+                return
+        except Exception as e:
+            print(f"Warning: Could not check repository status: {str(e)}")
+        
+        print("Discovering files and folders...")
+        items = self.repo_manager.get_all_files_and_folders()
+
         if not items:
             print("No files or folders found to commit.")
             return
-        
+
         print(f"Found {len(items)} items to process:")
-        for item_type, item_path in items:
+        for i, (item_type, item_path) in enumerate(items[:10]):
             print(f"  - {item_type}: {item_path}")
-        
-        # Confirm before proceeding
-        print(f"\nThis will create {len(items)} separate commits and push them one by one.")
-        confirm = input("Do you want to proceed? (y/N): ").strip().lower()
-        
-        if confirm != 'y':
-            print("Operation cancelled.")
-            return
-        
-        # Process each item
-        print(f"\nProcessing {len(items)} items...")
-        success_count = 0
-        
-        for i, (item_type, item_path) in enumerate(items, 1):
-            print(f"\n[{i}/{len(items)}] Processing {item_type}: {item_path}")
-            
-            if self.repo_manager.commit_and_push_item(item_type, item_path):
-                success_count += 1
-            
-            # Small delay between operations
-            if i < len(items):
-                time.sleep(0.5)
-        
-        # Summary
-        print(f"\nSummary:")
-        print(f"  - Successfully processed: {success_count}/{len(items)} items")
-        print(f"  - Failed: {len(items) - success_count}/{len(items)} items")
+        if len(items) > 10:
+            print(f"  ... and {len(items) - 10} more items")
+
+        print("\nCommit Mode Options:")
+        print("1. Bulk commit (all changes in one commit)")
+        print("2. Single file commits (each file separately)")
+
+        while True:
+            mode_choice = input("\nSelect commit mode (1-2): ").strip()
+            if mode_choice in ['1', '2']:
+                break
+            print("Invalid choice. Please enter 1 or 2.")
+
+        if mode_choice == '1':
+            print("\nBulk Commit Mode: All changes will be committed together.")
+            confirm = input("Do you want to proceed? (y/N): ").strip().lower()
+            if confirm != 'y':
+                print("Operation cancelled.")
+                return
+            if self.repo_manager.commit_all_changes("Bulk commit: Add all files"):
+                if self.repo_manager.push_to_remote_with_retry():
+                    print("✓ Successfully committed and pushed all changes.")
+                else:
+                    print("✗ Failed to push changes to remote.")
+            else:
+                print("✗ Failed to commit changes.")
+        else:
+            print(f"\nSingle File Commit Mode: This will create {len(items)} separate commits.")
+            delay = 1.5
+            try:
+                delay_input = input("Enter delay between commits in seconds (default: 1.5): ").strip()
+                if delay_input:
+                    delay = float(delay_input)
+                    if delay < 0:
+                        delay = 0
+            except ValueError:
+                print("Invalid delay value. Using default delay of 1.5 seconds.")
+
+            confirm = input(
+                f"Do you want to proceed with {delay} seconds delay between commits? (y/N): ").strip().lower()
+            if confirm != 'y':
+                print("Operation cancelled.")
+                return
+
+            print(f"\nProcessing {len(items)} items...")
+            success_count = 0
+            failed_items = []
+            for i, (item_type, item_path) in enumerate(items, 1):
+                print(f"\n[{i}/{len(items)}] Processing {item_type}: {item_path}")
+                if self.repo_manager.commit_and_push_item_with_retry(item_type, item_path):
+                    success_count += 1
+                else:
+                    failed_items.append((item_type, item_path))
+                if i < len(items) and delay > 0:
+                    print(f"Waiting {delay} seconds before next commit...")
+                    time.sleep(delay)
+
+            print(f"\nSummary:")
+            print(f"  - Successfully processed: {success_count}/{len(items)} items")
+            print(f"  - Failed: {len(failed_items)}/{len(items)} items")
 
     def run(self):
         """Main application loop"""
