@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="git-operations-tool",
-    version="0.1.2",
+    version="0.3.0",
     packages=find_packages(),
     install_requires=[
         "gitpython>=3.1.30",

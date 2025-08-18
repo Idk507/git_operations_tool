@@ -1,5 +1,7 @@
 import os
+import time
 from git import Repo, InvalidGitRepositoryError
+from git.exc import GitCommandError
 from pathlib import Path
 import fnmatch
 
@@ -60,25 +62,33 @@ class RepositoryManager:
             'dist/',
             'build/',
             '.pytest_cache/',
-            '.coverage'
+            '.coverage',
+            # Secrets/sensitive
+            '.pypirc',
+            '*.pem', '*.key', '*.p12', '*.pfx',
+            '.env', '.env.*',
         ]
         
         return patterns + default_patterns
 
     def _is_ignored(self, file_path, patterns):
         """Check if a file matches any gitignore pattern"""
+        normalized_path = file_path.replace('\\', '/')
         for pattern in patterns:
-            # Handle directory patterns
-            if pattern.endswith('/'):
-                if file_path.startswith(pattern) or f"/{pattern}" in file_path:
+            if not pattern:
+                continue
+            normalized_pattern = pattern.replace('\\', '/')
+            # Directory pattern
+            if normalized_pattern.endswith('/'):
+                dir_pattern = normalized_pattern.rstrip('/')
+                if normalized_path.startswith(dir_pattern + '/') or normalized_path == dir_pattern:
                     return True
-            # Handle file patterns
-            elif fnmatch.fnmatch(file_path, pattern) or fnmatch.fnmatch(os.path.basename(file_path), pattern):
+            # File/base name match
+            if fnmatch.fnmatch(normalized_path, normalized_pattern) or fnmatch.fnmatch(os.path.basename(normalized_path), normalized_pattern):
                 return True
-            # Handle patterns with path separators
-            elif '/' in pattern and fnmatch.fnmatch(file_path, pattern):
+            # Path-contained pattern
+            if '/' in normalized_pattern and fnmatch.fnmatch(normalized_path, normalized_pattern):
                 return True
-                
         return False
 
     def get_all_files_and_folders(self, path="."):
@@ -99,7 +109,7 @@ class RepositoryManager:
                 
                 # Skip files that match gitignore patterns
                 if not self._is_ignored(relative_path, patterns):
-                    # Skip hidden files except .gitignore
+                    # Skip most hidden files except .gitignore
                     if not relative_path.startswith('.') or relative_path == '.gitignore':
                         items.append(('file', relative_path))
         
@@ -168,6 +178,88 @@ class RepositoryManager:
             print(f"✗ Error pushing to remote: {str(e)}")
             return False
 
+    # -------- Safe push helpers (no force) --------
+    def _ensure_branch(self, branch: str) -> bool:
+        try:
+            try:
+                current = self.repo.active_branch.name
+            except Exception:
+                current = None
+            if current != branch:
+                try:
+                    self.repo.git.checkout(branch)
+                except Exception:
+                    self.repo.git.checkout('-b', branch)
+            return True
+        except Exception as e:
+            print(f"✗ Failed to switch/create branch '{branch}': {str(e)}")
+            return False
+
+    def _safe_pull_rebase(self, branch: str) -> None:
+        try:
+            self.repo.git.fetch('origin', branch)
+        except Exception:
+            return
+        try:
+            self.repo.git.rebase(f'origin/{branch}')
+        except Exception:
+            try:
+                self.repo.git.rebase('--abort')
+            except Exception:
+                pass
+            try:
+                self.repo.git.merge(f'origin/{branch}')
+            except Exception:
+                pass
+
+    def _push_changes_safely(self, branch: str, *, max_retries: int = 3, delay_seconds: float = 1.5) -> bool:
+        if not self._ensure_branch(branch):
+            return False
+        # Set upstream on first push if not configured
+        try:
+            if self.repo.active_branch.tracking_branch() is None:
+                try:
+                    self.repo.git.push('-u', 'origin', f'{branch}:{branch}')
+                    print(f"✓ Pushed changes to remote/{branch}")
+                    return True
+                except GitCommandError:
+                    pass
+        except Exception:
+            pass
+
+        attempt = 0
+        while attempt <= max_retries:
+            try:
+                self._safe_pull_rebase(branch)
+                self.repo.git.push('origin', f'{branch}:{branch}')
+                print(f"✓ Pushed changes to remote/{branch}")
+                return True
+            except GitCommandError as e:
+                attempt += 1
+                lower = str(e).lower()
+                if attempt <= max_retries and any(k in lower for k in ['non-fast-forward', 'rejected', 'failed to push', 'fetch first']):
+                    wait_time = max(0.0, delay_seconds)
+                    print(f"✗ Push rejected (attempt {attempt}/{max_retries}). Syncing and retrying in {wait_time:.1f}s...")
+                    time.sleep(wait_time)
+                    continue
+                print(f"✗ Error pushing to remote: {str(e)}")
+                return False
+            except Exception as e:
+                attempt += 1
+                if attempt <= max_retries:
+                    wait_time = max(0.0, delay_seconds)
+                    print(f"✗ Error pushing (attempt {attempt}/{max_retries}). Retrying in {wait_time:.1f}s...")
+                    time.sleep(wait_time)
+                    continue
+                print(f"✗ Error pushing to remote: {str(e)}")
+                return False
+        return False
+
+    def push_to_remote_with_retry(self, branch='main', max_retries=3, backoff_factor=2.0):
+        """Public safe push used by UI (no force)."""
+        base_delay = max(0.5, float(backoff_factor))
+        return self._push_changes_safely(branch, max_retries=max_retries, delay_seconds=base_delay)
+
     def commit_and_push_item(self, item_type, item_path, branch='main'):
         """Commit and push a single item"""
         try:
@@ -224,6 +316,54 @@ class RepositoryManager:
             
             return True
             
+        except Exception as e:
+            print(f"✗ Error processing {item_path}: {str(e)}")
+            return False
+
+    def commit_and_push_item_with_retry(self, item_type, item_path, branch='main', max_retries=3, backoff_factor=2.0):
+        """Commit and push a single item using the safe push strategy (no force)."""
+        try:
+            full_path = Path(self.repo.working_dir) / item_path
+            if not full_path.exists():
+                print(f"⚠ Skipping {item_path} - file/folder no longer exists")
+                return False
+
+            # Ensure branch first
+            if not self._ensure_branch(branch):
+                return False
+
+            # Stage file
+            self.repo.index.add([item_path])
+
+            # Verify staged changes
+            try:
+                if self.repo.head.is_valid():
+                    staged_files = self.repo.index.diff("HEAD")
+                    has_changes = any(item.a_path == item_path for item in staged_files)
+                else:
+                    has_changes = any(item_path in str(key) for key in self.repo.index.entries.keys())
+            except Exception:
+                has_changes = True
+
+            if not has_changes:
+                print(f"⚠ No changes to commit for {item_path}")
+                return False
+
+            commit_msg = f"Add {item_type}: {item_path}"
+            commit = self.repo.index.commit(commit_msg)
+            print(f"✓ Committed {item_type}: {item_path} (commit: {commit.hexsha[:8]})")
+
+            # Safe push
+            success = self._push_changes_safely(
+                branch,
+                max_retries=max_retries,
+                delay_seconds=max(0.5, float(backoff_factor))
+            )
+            if success:
+                print(f"✓ Pushed {item_type}: {item_path} to remote/{branch}")
+                return True
+            return False
+
         except Exception as e:
             print(f"✗ Error processing {item_path}: {str(e)}")
             return False
