@@ -1,12 +1,19 @@
 import sys
+import os
+import time
+
+# Add the parent directory to sys.path to allow running as a script
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from git import Repo, InvalidGitRepositoryError
 from git_operations_tool.core.repository import RepositoryManager
 from git_operations_tool.core.branches import BranchManager
 from git_operations_tool.core.operations import GitOperations
 from git_operations_tool.core.pull_requests import PullRequestManager
+from git_operations_tool.core.tags import TagManager
+from git_operations_tool.core.remotes import RemoteManager
 from git_operations_tool.interface.prompts import get_repo_url
 from git_operations_tool.interface.menu import MenuSystem
-import time 
 
 class GitOperationsTool:
     def __init__(self):
@@ -14,6 +21,8 @@ class GitOperationsTool:
         self.branch_manager = None
         self.operations = None
         self.pr_manager = None
+        self.tag_manager = None
+        self.remote_manager = None
         self.menu = None
         
     def auto_commit_and_push(self):
@@ -111,6 +120,8 @@ class GitOperationsTool:
             self.branch_manager = BranchManager(self.repo_manager.repo)
             self.operations = GitOperations(self.repo_manager.repo)
             self.pr_manager = PullRequestManager(self.repo_manager.repo, repo_url)
+            self.tag_manager = TagManager(self.repo_manager.repo)
+            self.remote_manager = RemoteManager(self.repo_manager.repo)
             self.menu = MenuSystem(self)
         except Exception as e:
             print(f"✗ Error initializing repository: {str(e)}")
@@ -121,7 +132,7 @@ class GitOperationsTool:
             self.menu.show_menu()
             
             try:
-                choice = input("\nEnter your choice (1-14): ").strip()
+                choice = input("\nEnter your choice (1-18): ").strip()
                 if not self.menu.handle_choice(choice):
                     break
                     
@@ -130,6 +141,7 @@ class GitOperationsTool:
                 break
             except Exception as e:
                 print(f"✗ Error: {str(e)}")
+
 def run_tool():
     """Entry point for the console script"""
     tool = GitOperationsTool()
@@ -138,4 +150,3 @@ def run_tool():
 if __name__ == "__main__":
     tool = GitOperationsTool()
     tool.run()
-
