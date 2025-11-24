@@ -19,7 +19,11 @@ class MenuSystem:
         print("11. Create pull request")
         print("12. Stash changes")
         print("13. Apply stash")
-        print("14. Exit")
+        print("14. Create tag")
+        print("15. List tags")
+        print("16. Push tags")
+        print("17. Delete tag")
+        print("18. Exit")
         print("=" * 50)
 
     def handle_choice(self, choice):
@@ -63,6 +67,17 @@ class MenuSystem:
         elif choice == '13':
             self.git_tool.operations.apply_stash()
         elif choice == '14':
+            tag_name = input("Enter tag name: ").strip()
+            message = input("Enter tag message (optional): ").strip() or None
+            self.git_tool.tag_manager.create_tag(tag_name, message)
+        elif choice == '15':
+            self.git_tool.tag_manager.list_tags()
+        elif choice == '16':
+            self.git_tool.tag_manager.push_tags()
+        elif choice == '17':
+            tag_name = input("Enter tag name to delete: ").strip()
+            self.git_tool.tag_manager.delete_tag(tag_name)
+        elif choice == '18':
             print("Goodbye!")
             return False
         else:
