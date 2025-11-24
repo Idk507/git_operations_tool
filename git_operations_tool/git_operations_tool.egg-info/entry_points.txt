@@ -1,2 +1,0 @@
-[console_scripts]
-git-ops = git_operations_tool.main:run_tool
