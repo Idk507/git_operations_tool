@@ -62,33 +62,25 @@ class RepositoryManager:
             'dist/',
             'build/',
             '.pytest_cache/',
-            '.coverage',
-            # Secrets/sensitive
-            '.pypirc',
-            '*.pem', '*.key', '*.p12', '*.pfx',
-            '.env', '.env.*',
+            '.coverage'
         ]
         
         return patterns + default_patterns
 
     def _is_ignored(self, file_path, patterns):
         """Check if a file matches any gitignore pattern"""
-        normalized_path = file_path.replace('\\', '/')
         for pattern in patterns:
-            if not pattern:
-                continue
-            normalized_pattern = pattern.replace('\\', '/')
-            # Directory pattern
-            if normalized_pattern.endswith('/'):
-                dir_pattern = normalized_pattern.rstrip('/')
-                if normalized_path.startswith(dir_pattern + '/') or normalized_path == dir_pattern:
+            # Handle directory patterns
+            if pattern.endswith('/'):
+                if file_path.startswith(pattern) or f"/{pattern}" in file_path:
                     return True
-            # File/base name match
-            if fnmatch.fnmatch(normalized_path, normalized_pattern) or fnmatch.fnmatch(os.path.basename(normalized_path), normalized_pattern):
+            # Handle file patterns
+            elif fnmatch.fnmatch(file_path, pattern) or fnmatch.fnmatch(os.path.basename(file_path), pattern):
                 return True
-            # Path-contained pattern
-            if '/' in normalized_pattern and fnmatch.fnmatch(normalized_path, normalized_pattern):
+            # Handle patterns with path separators
+            elif '/' in pattern and fnmatch.fnmatch(file_path, pattern):
                 return True
+                
         return False
 
     def get_all_files_and_folders(self, path="."):
@@ -109,7 +101,7 @@ class RepositoryManager:
                 
                 # Skip files that match gitignore patterns
                 if not self._is_ignored(relative_path, patterns):
-                    # Skip most hidden files except .gitignore
+                    # Skip hidden files except .gitignore
                     if not relative_path.startswith('.') or relative_path == '.gitignore':
                         items.append(('file', relative_path))
         
@@ -331,6 +323,20 @@ class RepositoryManager:
             # Ensure branch first
             if not self._ensure_branch(branch):
                 return False
+
+            # **PULL REMOTE CHANGES FIRST** to avoid non-fast-forward errors
+            try:
+                # print(f"  Syncing with remote...")
+                self.repo.git.fetch('origin', branch)
+                try:
+                    # Try to merge remote changes if any
+                    self.repo.git.merge(f'origin/{branch}', '--no-edit')
+                except GitCommandError:
+                    # No remote branch yet or already up to date
+                    pass
+            except Exception as e:
+                # If fetch fails, it might be a new repository - continue anyway
+                pass
 
             # Stage file
             self.repo.index.add([item_path])
