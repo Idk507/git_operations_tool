@@ -1,26 +1,3 @@
-Metadata-Version: 2.4
-Name: git-operations-tool
-Version: 0.4.0
-Summary: A comprehensive Git operations tool with advanced features
-Author-email: Dhanushkumar R <danushidk507@gmail.com>
-Project-URL: Homepage, https://github.com/Idk507/git_operations_tool
-Project-URL: Bug Tracker, https://github.com/Idk507/git_operations_tool/issues
-Classifier: Development Status :: 4 - Beta
-Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.7
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
-Classifier: Programming Language :: Python :: 3.10
-Classifier: Operating System :: OS Independent
-Requires-Python: >=3.7
-Description-Content-Type: text/markdown
-License-File: LICENSE
-Requires-Dist: gitpython>=3.1.30
-Requires-Dist: requests>=2.28.1
-Dynamic: license-file
-
 # Git Operations Tool
 
 [![PyPI version](https://badge.fury.io/py/git-operations-tool.svg)]([https://test.pypi.org/project/git-operations-tool/])
